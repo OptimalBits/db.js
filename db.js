@@ -198,8 +198,10 @@
     setObject : function (key, object, cb) {
       try {
         var objectStore = this._transaction(READ_WRITE, cb);
-        objectStore.delete(key);
-        objectStore.add(object, key);
+        var request = objectStore.delete(key);
+        request.onsuccess = function(){
+          objectStore.add(object, key);
+        }
       }catch(e){
         cb(e);
       }
