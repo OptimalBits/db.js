@@ -49,9 +49,13 @@
         cb(null, new DBWrapper(e.target.result));
       };
 
-      request.onerror = function (e) {
+      request.onerror = request.onblocked = function (e) {
         cb(e);
       };
+            
+      if(request.hasOwnProperty('onupgradeneeded')){
+        request.onupgradeneeded = request.onsuccess;
+      }
     }catch(e){
       DBFactory.delete(name, function(err){
         if(!err){
@@ -61,11 +65,9 @@
         }
       });
     }
-    
-    // request.onsuccess = request.onupgradeneeded;
   }
   
-  DBFactory.delete = function(name, cb) {
+  DBFactory.deleteDatabase = function(name, cb) {
     var request = indexedDB.deleteDatabase(name);
     
     try{
@@ -155,10 +157,6 @@
         cb(new Error('Store not found'));
       }
     },
-    
-    clearObjectStore : function (name, cb) {
-      this.deleteObjectStore(name, cb);
-    },
   
     getAllObjects : function (storeName, cb) {
       var keyRange = IDBKeyRange.lowerBound('');
@@ -233,7 +231,9 @@
               obj[prop] = newObj[prop];
             }
           }
-          self.setObject(key, obj, cb);
+          self.setObject(key, obj, function(err){
+            cb(err, obj);
+          });
         }else{
           cb(err);
         }
