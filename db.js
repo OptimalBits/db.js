@@ -33,9 +33,7 @@
   
   IDBTransaction.READ_ONLY = IDBTransaction.READ_ONLY || 'readonly';
   IDBTransaction.READ_WRITE = IDBTransaction.READ_WRITE || 'readwrite';
-  
-  var supportUpgrade = false;
-  
+    
   var DBFactory = function (name, version, cb) {
     var request;
     if(typeof version === 'function'){
@@ -47,6 +45,8 @@
     }
     
     try{
+      request.onupgradeneeded = request.onsuccess;
+      
       request.onsuccess = function (e) {
         removeListeners(request);
         cb(null, new DBWrapper(e.target.result));    
@@ -57,11 +57,6 @@
         removeListeners(request);
         cb(new Error("indexedDB.delete Error: " + e.message));
       };
-            
-      if(request.hasOwnProperty('onupgradeneeded')){
-        request.onupgradeneeded = request.onsuccess;
-        supportUpgrade = true;
-      }
     }catch(e){
       DBFactory.deleteDatabase(name, function(err){
         if(!err){
@@ -106,19 +101,15 @@
 
       version = version === '' ? 0 : version + 1;
     
-      if(!supportUpgrade){
-        request = self.db.setVersion(version);
-      }else{
-        self.db.close()
-        request = indexedDB.open(self.db.name, version);
+      self.db.close()
+      request = indexedDB.open(self.db.name, version);
         
-        request.onupgradeneeded = function(e){
-          removeListeners(request);
-          self.db = e.target.result;
-          if(!succeeded){
-            succeeded = true;
-            cb();
-          }
+      request.onupgradeneeded = function(e){
+        removeListeners(request);
+        self.db = e.target.result;
+        if(!succeeded){
+          succeeded = true;
+          cb();
         }
       }
       request.onsuccess = function(e){
