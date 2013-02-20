@@ -46,18 +46,19 @@
     
     try{
       request.onsuccess = function (e) {
-        cb(null, new DBWrapper(e.target.result));
+        cb(null, new DBWrapper(e.target.result));    
       };
-
-      request.onerror = request.onblocked = function (e) {
-        cb(e);
+        
+      request.onblocked =
+      request.onerror = function (e) {
+        cb(new Error("indexedDB.delete Error: " + e.message));
       };
             
       if(request.hasOwnProperty('onupgradeneeded')){
         request.onupgradeneeded = request.onsuccess;
       }
     }catch(e){
-      DBFactory.delete(name, function(err){
+      DBFactory.deleteDatabase(name, function(err){
         if(!err){
           open(name, cb);
         }else{
@@ -71,15 +72,14 @@
     var request = indexedDB.deleteDatabase(name);
     
     try{
-      request.onsuccess = function (event) {
+      request.onsuccess = function (e) {
         cb();
       }
-      request.onerror = function (event) {
-        cb(new Error("indexedDB.delete Error: " + event.message));
-      }
-      request.onblocked = function (event) {
-        cb(new Error("indexedDB.delete Error: " + event.message));
-      }
+      
+      request.onblocked =
+      request.onerror = function (e) {
+        cb(new Error("indexedDB.delete Error: " + e.message));
+      }      
     }catch(e){
       cb(e)
     } 
@@ -104,6 +104,14 @@
       }else{
         self.db.close()
         request = indexedDB.open(self.db.name, version);
+        
+        request.onupgradeneeded = function(e){
+          self.db = e.target.result;
+          if(!succeeded){
+            succeeded = true;
+            cb();
+          }
+        }
       }
       request.onsuccess = function(e){
         if(!succeeded){
@@ -111,15 +119,8 @@
           cb();
         }
       }
-    
-      request.onupgradeneeded = function(e){
-        self.db = e.target.result;
-        if(!succeeded){
-          succeeded = true;
-          cb();
-        }
-      }
-      request.onblocked = request.onerror = function (e) {
+      // request.onblocked = 
+      request.onerror = function (e) {
         cb(e);
       }
     },
@@ -156,11 +157,6 @@
       } else {
         cb(new Error('Store not found'));
       }
-    },
-  
-    getAllObjects : function (storeName, cb) {
-      var keyRange = IDBKeyRange.lowerBound('');
-      this.queryStore(storeName, keyRange, null, cb);
     },
 
     // Returns an object upfilling keyValue = {key:value}
@@ -250,6 +246,11 @@
       request.onerror = function (e) {
         cb(e)
       };
+    },
+    
+    getAllObjects : function (cb) {
+      var keyRange = IDBKeyRange.lowerBound('');
+      this.query(keyRange, cb);
     },
     
     query : function (keyRange, filter, cb) { 
