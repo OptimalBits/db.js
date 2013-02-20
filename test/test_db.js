@@ -1,24 +1,9 @@
 define(['db'], function(DBFactory) {
-
-  var text1 = "Lorem Ipsum",
-    text2 = "dolor sit amet",
-    text3 = "",
-
-    url1 = 'http://localhost:8080/fixtures/lorem.txt',
-    url2 = 'http://localhost:8080/fixtures/ipsum.txt',
-    url3 = 'http://localhost:8080/fixtures/long.txt',
-    url4 = 'http://localhost:8080/fixtures/asdf.txt',
-    url5 = 'http://localhost:8080/fixtures/qwer.txt',
-    url6 = 'http://localhost:8080/fixtures/dsgbv.txt';
-
-  for (var i = 0; i < 1000; i++) {
-    text3 += "a";
-  }
-
+  
   describe('Database', function() {
     var db;
     
-    before(function(done){
+    after(function(done){
       DBFactory.deleteDatabase('test', function(err){
         done();
       });
@@ -34,7 +19,7 @@ define(['db'], function(DBFactory) {
     });
     
     it('Get an object store', function(done) {
-      db.getObjectStore('test1', function(err, storage){
+      db.getObjectStore('animals', function(err, storage){
         expect(err).to.not.be.ok();
         expect(storage).to.be.an(Object);
         done();
