@@ -19,7 +19,7 @@ define(['db'], function(DBFactory) {
     var db;
     
     before(function(done){
-      DBFactory.delete('test', function(err){
+      DBFactory.deleteDatabase('test', function(err){
         done();
       });
     });
