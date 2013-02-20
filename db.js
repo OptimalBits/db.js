@@ -31,8 +31,8 @@
   IDBTransaction = window.IDBTransaction || window.webkitIDBTransaction,
   IDBKeyRange = window.IDBKeyRange || window.webkitIDBKeyRange;
   
-  IDBTransaction.READ_ONLY = IDBTransaction.READ_ONLY || 'readonly';
-  IDBTransaction.READ_WRITE = IDBTransaction.READ_WRITE || 'readwrite';
+  var READ_ONLY = IDBTransaction.READ_ONLY || 'readonly';
+  var READ_WRITE = IDBTransaction.READ_WRITE || 'readwrite';
     
   var DBFactory = function (name, version, cb) {
     var request;
@@ -47,9 +47,9 @@
     try{
       request.onupgradeneeded = request.onsuccess;
       
-      request.onsuccess = function (e) {
+      request.onsuccess = function () {
         removeListeners(request);
-        cb(null, new DBWrapper(e.target.result));    
+        cb(null, new DBWrapper(request.result));    
       };
         
       request.onblocked =
@@ -72,7 +72,7 @@
     var request = indexedDB.deleteDatabase(name);
     
     try{
-      request.onsuccess = function (e) {
+      request.onsuccess = function () {
         removeListeners(request);
         cb();
       }
@@ -101,18 +101,18 @@
 
       version = version === '' ? 0 : version + 1;
     
-      self.db.close()
-      request = indexedDB.open(self.db.name, version);
+      this.db.close()
+      request = indexedDB.open(this.db.name, version);
         
-      request.onupgradeneeded = function(e){
+      request.onupgradeneeded = function(){
         removeListeners(request);
-        self.db = e.target.result;
+        self.db = request.result;
         if(!succeeded){
           succeeded = true;
           cb();
         }
       }
-      request.onsuccess = function(e){
+      request.onsuccess = function(){
         removeListeners(request);
         if(!succeeded){
           succeeded = true;
@@ -128,16 +128,19 @@
 
     getObjectStore : function (name, cb) {
       var transactionType =  IDBTransaction.READ_WRITE;
-      var self = this;
-      if (self._hasStore(name)){
-        self._getStore(name, transactionType, function(store){
-          cb(null, new ObjectStore(store));
-        })
-      } else {
-        self.incVersion(function(err){
+      if (this._hasStore(name)){
+        cb(null, new ObjectStore(this.db, name));
+     } else {
+        var _this = this;
+        this.incVersion(function(err){
           if(!err){
-            var store = self.db.createObjectStore(name, {}, false);
-            cb(err, new ObjectStore(store));
+            var store = _this.db.createObjectStore(name, {}, false);
+            store.transaction.oncomplete = function(){
+              cb(err, new ObjectStore(_this.db, name));
+            }
+            store.transaction.onerror = function(e){
+              cb(new Error("Error creating object store:" + e.message));
+            }
           }else{
             cb(err);
           }
@@ -168,85 +171,74 @@
     
     _hasStore : function(name){
       return this.db.objectStoreNames.contains(name);
-    },
-  
-    _getStore : function (name, transactionType, cb) {
-      if(this._hasStore(name)){
-        var transaction = this.db.transaction([name], transactionType);
-        cb(transaction.objectStore(name));
-      }else{
-        cb();
-      }
-    },
+    }
+    
   }
   
-  var ObjectStore = function(store){
-    this.store = store;
+  var ObjectStore = function(db, name){
+    this.db = db;
+    this.name = name;
   }
   
   ObjectStore.prototype = {
+    _transaction: function(type, cb){
+      var transaction = 
+        this.db.transaction([this.name], type);
+      if(cb){
+        transaction.oncomplete = function(e){
+          cb();
+        }
+        transaction.onerror = function(e){
+          cb(new Error('Error performing transaction:'+e.message));
+        }
+      }
+      return transaction.objectStore(this.name);
+    },
+    
     setObject : function (key, object, cb) {
-      var request = this.store.put(object, key);
-      
-      request.onsuccess = function (e) {
-        cb();
-      };
-
-      request.onerror = function (e) {
+      try {
+        var objectStore = this._transaction(READ_WRITE, cb);
+        objectStore.delete(key);
+        objectStore.add(object, key);
+      }catch(e){
         cb(e);
-      }; 
+      }
     },
 
     getObject : function (key, cb) {
-      var
-        keyRange = IDBKeyRange.only(key),
-        request = this.store.openCursor(keyRange);
-
-      request.onsuccess = function (e) {
-        var result = e.target.result;
+      var objectStore = this._transaction(READ_ONLY);
+      var request = objectStore.get(key);
+      request.onsuccess = function () {
+        var result = request.result;
 
         if (result) {
-          cb(null, result.value);
+          cb(null, result);
         }else{
           cb(new Error('Object not found'))
         }
       }
       
-      request.onerror = function (err) {
-        cb(err);
+      request.onerror = function (e) {
+        cb(new Error("indexedDB getObject Error: " + e.message));
       };
     },
-
+    
     updateObject : function (key, newObj, cb) {
-      var self = this;
-
-      // To guarantee atomicity, we should use db.version here.
-      self.getObject(key, function (err, obj) {
-        if (obj) {
-          for(var prop in newObj){
-            if(newObj.hasOwnProperty(prop)){
-              obj[prop] = newObj[prop];
-            }
-          }
-          self.setObject(key, obj, function(err){
-            cb(err, obj);
-          });
-        }else{
-          cb(err);
-        }
-      });
+      try {
+        var objectStore = this._transaction(READ_WRITE, cb);
+        objectStore.put(newObj, key);
+      }catch(e){
+        cb(e);
+      }
     },
     
     deleteObject : function (key, cb) {
-      var request = this.store.delete(key);
-
-      request.onsuccess = function (e) {
-        cb()
-      };
-
-      request.onerror = function (e) {
-        cb(e)
-      };
+      try{
+        var objectStore = this._transaction(READ_WRITE, cb);
+        objectStore.delete(key);
+      } catch(e){
+        cb(e);
+      }
     },
     
     getAllObjects : function (cb) {
@@ -255,34 +247,34 @@
     },
     
     query : function (keyRange, filter, cb) { 
-      var 
-        cursorRequest = this.store.openCursor(keyRange),
-        results = {};
-      
-      if(!cb){
-        cb = filter;
-        filter = null;
-      }
+      try{
+        var objectStore = this._transaction(READ_ONLY);
+        var request = objectStore.openCursor(keyRange);
+        var results = {};
+            
+        if(!cb){
+          cb = filter;
+          filter = null;
+        }
 
-      cursorRequest.onsuccess = function (e) {
-        var result = e.target.result;
-        if (!result) {
-          cb(null, results);
-        }else{
-          if (filter) {
-            if (filter(result.value)) {
+        request.onsuccess = function () {
+          var result = request.result;
+          if (!result) {
+            cb(null, results);
+          }else{
+            if(!filter || filter(result.value)){
               results[result.key] = result.value;
             }
-          } else {
-            results[result.key] = result.value;
+            result['continue'](); //Hack to shut up IDE equal to result.continue()
           }
-          result['continue'](); //Hack to shut up IDE equal to result.continue()
         }
-      };
-
-      cursorRequest.onerror = function (err) {
-        cb(err);
-      };
+        
+        request.onerror = function (e) {
+          cb(new Error("indexedDB query Error: " + e.message));
+        };
+      }catch(e){
+        cb(e);
+      }
     }
   }
   
