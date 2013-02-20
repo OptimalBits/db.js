@@ -1,5 +1,5 @@
 /**
-  ds.js (c) OptimalBits 2012.
+  db.js (c) OptimalBits 2012.
   
   A lightweight wrapper for the IndexedDB API.
   
@@ -34,6 +34,8 @@
   IDBTransaction.READ_ONLY = IDBTransaction.READ_ONLY || 'readonly';
   IDBTransaction.READ_WRITE = IDBTransaction.READ_WRITE || 'readwrite';
   
+  var supportUpgrade = false;
+  
   var DBFactory = function (name, version, cb) {
     var request;
     if(typeof version === 'function'){
@@ -46,16 +48,19 @@
     
     try{
       request.onsuccess = function (e) {
+        removeListeners(request);
         cb(null, new DBWrapper(e.target.result));    
       };
         
       request.onblocked =
       request.onerror = function (e) {
+        removeListeners(request);
         cb(new Error("indexedDB.delete Error: " + e.message));
       };
             
       if(request.hasOwnProperty('onupgradeneeded')){
         request.onupgradeneeded = request.onsuccess;
+        supportUpgrade = true;
       }
     }catch(e){
       DBFactory.deleteDatabase(name, function(err){
@@ -73,11 +78,13 @@
     
     try{
       request.onsuccess = function (e) {
+        removeListeners(request);
         cb();
       }
       
       request.onblocked =
       request.onerror = function (e) {
+        removeListeners(request);
         cb(new Error("indexedDB.delete Error: " + e.message));
       }      
     }catch(e){
@@ -99,13 +106,14 @@
 
       version = version === '' ? 0 : version + 1;
     
-      if(self.db.setVersion){
+      if(!supportUpgrade){
         request = self.db.setVersion(version);
       }else{
         self.db.close()
         request = indexedDB.open(self.db.name, version);
         
         request.onupgradeneeded = function(e){
+          removeListeners(request);
           self.db = e.target.result;
           if(!succeeded){
             succeeded = true;
@@ -114,14 +122,16 @@
         }
       }
       request.onsuccess = function(e){
+        removeListeners(request);
         if(!succeeded){
           succeeded = true;
           cb();
         }
       }
-      // request.onblocked = 
+      request.onblocked = 
       request.onerror = function (e) {
-        cb(e);
+        removeListeners(request);
+        cb(new Error("indexedDB upgrading Error: " + e.message));
       }
     },
 
@@ -283,6 +293,13 @@
         cb(err);
       };
     }
+  }
+  
+  function removeListeners(request){
+    request.onerror = 
+    request.onblocked = 
+    request.onsuccess = 
+    request.onupgradeneeded = null;
   }
   
   // AMD define happens at the end for compatibility with AMD loaders
