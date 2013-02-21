@@ -55,7 +55,7 @@
       request.onblocked =
       request.onerror = function (e) {
         removeListeners(request);
-        cb(new Error("indexedDB.delete Error: " + e.message));
+        cb(new Error(request.result));
       };
     }catch(e){
       DBFactory.deleteDatabase(name, function(err){
@@ -80,7 +80,7 @@
       request.onblocked =
       request.onerror = function (e) {
         removeListeners(request);
-        cb(new Error("indexedDB.delete Error: " + e.message));
+        cb(new Error("Error deleting database"));
       }      
     }catch(e){
       cb(e)
@@ -122,7 +122,7 @@
       request.onblocked = 
       request.onerror = function (e) {
         removeListeners(request);
-        cb(new Error("indexedDB upgrading Error: " + e.message));
+        cb(new Error(request.result));
       }
     },
 
@@ -139,7 +139,7 @@
               cb(err, new ObjectStore(_this.db, name));
             }
             store.transaction.onerror = function(e){
-              cb(new Error("Error creating object store:" + e.message));
+              cb(new Error(e.target.result));
             }
           }else{
             cb(err);
@@ -189,7 +189,7 @@
           cb();
         }
         transaction.onerror = function(e){
-          cb(new Error('Error performing transaction:'+e.message));
+          cb(new Error('Error performing transaction:'+e.target.result));
         }
       }
       return transaction.objectStore(this.name);
@@ -220,8 +220,8 @@
         }
       }
       
-      request.onerror = function (e) {
-        cb(new Error("indexedDB getObject Error: " + e.message));
+      request.onerror = function () {
+        cb(new Error(request.result));
       };
     },
     
@@ -271,8 +271,8 @@
           }
         }
         
-        request.onerror = function (e) {
-          cb(new Error("indexedDB query Error: " + e.message));
+        request.onerror = function () {
+          cb(new Error(request.result));
         };
       }catch(e){
         cb(e);
