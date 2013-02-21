@@ -208,21 +208,25 @@
     },
 
     getObject : function (key, cb) {
-      var objectStore = this._transaction(READ_ONLY);
-      var request = objectStore.get(key);
-      request.onsuccess = function () {
-        var result = request.result;
+      try {
+        var objectStore = this._transaction(READ_ONLY);
+        var request = objectStore.get(key);
+        request.onsuccess = function () {
+          var result = request.result;
 
-        if (result) {
-          cb(null, result);
-        }else{
-          cb(new Error('Object not found'))
+          if (result) {
+            cb(null, result);
+          }else{
+            cb(new Error('Object not found'))
+          }
         }
-      }
       
-      request.onerror = function () {
-        cb(new Error(request.result));
-      };
+        request.onerror = function () {
+          cb(new Error(request.result));
+        };
+      }catch(err){
+        cb(err);
+      }
     },
     
     updateObject : function (key, newObj, cb) {
